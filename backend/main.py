@@ -4,6 +4,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import threading
 import sqlite3
+from typing import Optional
+
 
 # 1. SETUP THE API
 app = FastAPI()
@@ -109,3 +111,27 @@ async def get_mirror():
 async def handshake():
     """Returns the unique hardware ID to 'lock' the session"""
     return {"chip_id": latest_state.get("id", "UNKNOWN")}
+
+@app.get("/history")
+async def get_history(limit: int = 100):
+    """Returns the last 100 recorded ticks for the UI seek bar"""
+    conn = sqlite3.connect(DB_NAME)
+    conn.row_factory = sqlite3.Row # This makes results look like dictionaries
+    cursor = conn.cursor()
+    cursor.execute('SELECT * FROM telemetry ORDER BY id DESC LIMIT ?', (limit,))
+    rows = cursor.fetchall()
+    conn.close()
+    return [dict(row) for row in rows]
+
+@app.get("/seek/{record_id}")
+async def seek_to_record(record_id: int):
+    """Returns a specific historical 'tick' by its ID"""
+    conn = sqlite3.connect(DB_NAME)
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+    cursor.execute('SELECT * FROM telemetry WHERE id = ?', (record_id,))
+    row = cursor.fetchone()
+    conn.close()
+    if row:
+        return dict(row)
+    return {"error": "Record not found"}

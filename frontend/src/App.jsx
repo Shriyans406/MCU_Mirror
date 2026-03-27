@@ -3,6 +3,9 @@ import axios from 'axios';
 import { Thermometer, Cpu, Activity, ShieldCheck } from 'lucide-react';
 
 function App() {
+  const [isLive, setIsLive] = useState(true);
+  const [history, setHistory] = useState([]);
+  const [seekIndex, setSeekIndex] = useState(0);
   const [boardData, setBoardData] = useState({
     id: "SEARCHING...",
     ts: 0,
@@ -14,15 +17,26 @@ function App() {
   // This "Effect" runs every 200ms to pull data from Python
   useEffect(() => {
     const interval = setInterval(() => {
-      axios.get('http://127.0.0.1:8000/mirror')
-        .then(res => {
-          setBoardData(res.data);
-        })
-        .catch(err => console.error("Backend unreachable. Is main.py running?"));
-    }, 200); // 5 times per second sync
+      if (isLive) {
+        // LIVE MODE: Get data from /mirror
+        axios.get('http://127.0.0.1:8000/mirror')
+          .then(res => setBoardData(res.data))
+          .catch(err => console.error(err));
+      }
+    }, 200);
 
-    return () => clearInterval(interval);
-  }, []);
+    // Fetch history list every 5 seconds to update the seek bar
+    const historyInterval = setInterval(() => {
+      axios.get('http://127.0.0.1:8000/history?limit=50')
+        .then(res => setHistory(res.data.reverse()))
+        .catch(err => console.error(err));
+    }, 5000);
+
+    return () => {
+      clearInterval(interval);
+      clearInterval(historyInterval);
+    };
+  }, [isLive]);
 
   return (
     <div style={{
@@ -94,6 +108,46 @@ function App() {
         </div>
 
       </div>
+
+      <div style={{ marginTop: '30px', padding: '20px', background: '#1a1a1a', borderRadius: '8px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px' }}>
+          <h3>TIME-TRAVEL DEBUGGER</h3>
+          <button
+            onClick={() => setIsLive(!isLive)}
+            style={{
+              backgroundColor: isLive ? '#ff0033' : '#00ff99',
+              color: 'black', padding: '5px 15px', border: 'none', cursor: 'pointer', fontWeight: 'bold'
+            }}
+          >
+            {isLive ? "PAUSE & EXPLORE" : "RESUME LIVE"}
+          </button>
+        </div>
+
+        <input
+          type="range"
+          min="0"
+          max={history.length - 1}
+          value={seekIndex}
+          disabled={isLive}
+          onChange={(e) => {
+            const idx = e.target.value;
+            setSeekIndex(idx);
+            setBoardData({
+              id: history[idx].chip_id,
+              ts: history[idx].timestamp_ms,
+              led: history[idx].led_state,
+              temp: history[idx].temperature,
+              mem: history[idx].memory_free
+            });
+          }}
+          style={{ width: '100%', cursor: isLive ? 'not-allowed' : 'pointer' }}
+        />
+        <p style={{ color: '#555', fontSize: '0.8rem' }}>
+          {isLive ? "Showing Live Stream..." : `Viewing Record ID: ${history[seekIndex]?.id || 'N/A'}`}
+        </p>
+      </div>
+
+
 
       {/* SYSTEM STATUS FOOTER */}
       <footer style={{ marginTop: '50px', borderTop: '1px solid #222', paddingTop: '10px', display: 'flex', gap: '20px' }}>
