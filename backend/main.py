@@ -12,6 +12,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
     allow_methods=["*"],
+    allow_credentials=True,
     allow_headers=["*"],
 )
 
@@ -39,6 +40,7 @@ def listen_to_board():
         
         while True:
             line = ser.readline().decode('utf-8').strip()
+            print(f"RAW_DEBUG: '{line}'")
             # Look for our 'DATA:' prefix
             if line.startswith("DATA:"):
                 json_str = line.replace("DATA:", "")
