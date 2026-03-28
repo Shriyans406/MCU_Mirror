@@ -1,11 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { Thermometer, Cpu, Activity, ShieldCheck } from 'lucide-react';
+import { Thermometer, Cpu, Activity, ShieldCheck, Zap, Terminal } from 'lucide-react';
+import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
+import ShrikeBoard from './ShrikeBoard';
 
 function App() {
   const [isLive, setIsLive] = useState(true);
   const [history, setHistory] = useState([]);
   const [seekIndex, setSeekIndex] = useState(0);
+  const [chartData, setChartData] = useState([]); // New for Phase 3
+  const [command, setCommand] = useState("");     // New for Phase 3
   const [boardData, setBoardData] = useState({
     id: "SEARCHING...",
     ts: 0,
@@ -14,18 +18,22 @@ function App() {
     mem: 0
   });
 
-  // This "Effect" runs every 200ms to pull data from Python
   useEffect(() => {
     const interval = setInterval(() => {
       if (isLive) {
-        // LIVE MODE: Get data from /mirror
         axios.get('http://127.0.0.1:8000/mirror')
-          .then(res => setBoardData(res.data))
+          .then(res => {
+            setBoardData(res.data);
+            // Update chart with live data (keep last 20 points)
+            setChartData(prev => [...prev.slice(-19), {
+              time: new Date().toLocaleTimeString().split(' ')[0],
+              temp: res.data.temp
+            }]);
+          })
           .catch(err => console.error(err));
       }
     }, 200);
 
-    // Fetch history list every 5 seconds to update the seek bar
     const historyInterval = setInterval(() => {
       axios.get('http://127.0.0.1:8000/history?limit=50')
         .then(res => setHistory(res.data.reverse()))
@@ -38,91 +46,92 @@ function App() {
     };
   }, [isLive]);
 
+  const handleCommand = (e) => {
+    e.preventDefault();
+    console.log("Command sent to Buffer:", command);
+    // Logic for Phase 4 will go here
+    setCommand("");
+  };
+
   return (
-    <div style={{
-      backgroundColor: '#0a0a0a',
-      color: '#00ff99',
-      minHeight: '100vh',
-      padding: '40px',
-      fontFamily: 'monospace'
-    }}>
+    <div style={{ backgroundColor: '#050505', color: '#00ff99', minHeight: '100vh', padding: '40px', fontFamily: 'monospace' }}>
+
       {/* HEADER SECTION */}
-      <header style={{ borderBottom: '2px solid #333', marginBottom: '30px', paddingBottom: '10px' }}>
-        <h1 style={{ margin: 0, fontSize: '1.5rem', letterSpacing: '2px' }}>
-          SHRIKE-MIRROR // <span style={{ color: '#555' }}>V1.0</span>
-        </h1>
-        <p style={{ color: '#888', fontSize: '0.8rem' }}>HARDWARE_ID: {boardData.id}</p>
+      <header style={{ borderBottom: '2px solid #333', marginBottom: '30px', paddingBottom: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
+        <div>
+          <h1 style={{ margin: 0, fontSize: '1.5rem', letterSpacing: '2px' }}>
+            SHRIKE-MIRROR // <span style={{ color: '#555' }}>REFLECTION_MODE</span>
+          </h1>
+          <p style={{ color: '#888', fontSize: '0.8rem', marginTop: '5px' }}>HARDWARE_ID: {boardData.id}</p>
+        </div>
+        <div style={{ color: isLive ? '#00ff99' : '#ff0033', fontSize: '0.8rem', fontWeight: 'bold' }}>
+          {isLive ? "● LIVE_SYNC_ACTIVE" : "○ SYSTEM_PAUSED"}
+        </div>
       </header>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '20px' }}>
+      {/* TOP ROW: VIRTUAL BOARD & LIVE CHART */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '20px' }}>
 
-        {/* VIRTUAL LED CARD */}
+        {/* VIRTUAL BOARD COMPONENT */}
         <div style={cardStyle}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '20px' }}>
+            <Zap size={18} />
+            <h3>VIRTUAL_HARDWARE</h3>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '200px' }}>
+            <ShrikeBoard ledState={boardData.led} />
+          </div>
+        </div>
+
+        {/* TELEMETRY CHART */}
+        <div style={cardStyle}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '20px' }}>
             <Activity size={18} />
-            <h3>USER_LED (GP0)</h3>
+            <h3>THERMAL_TELEMETRY</h3>
           </div>
-          <div style={{ padding: '20px', textAlign: 'center' }}>
-            <div style={{
-              width: '60px',
-              height: '60px',
-              borderRadius: '50%',
-              margin: 'auto',
-              backgroundColor: boardData.led ? '#ff0033' : '#222',
-              boxShadow: boardData.led ? '0 0 30px #ff0033' : 'none',
-              transition: 'all 0.05s ease-in-out',
-              border: '2px solid #444'
-            }}></div>
-            <p style={{ marginTop: '15px', color: boardData.led ? '#ff0033' : '#444' }}>
-              {boardData.led ? 'STATUS: HIGH' : 'STATUS: LOW'}
-            </p>
+          <div style={{ height: '200px' }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={chartData}>
+                <XAxis dataKey="time" hide />
+                <YAxis domain={['auto', 'auto']} stroke="#333" fontSize={10} />
+                <Tooltip contentStyle={{ backgroundColor: '#111', border: '1px solid #333', color: '#00ff99' }} />
+                <Line type="monotone" dataKey="temp" stroke="#00ff99" strokeWidth={2} dot={false} isAnimationActive={false} />
+              </LineChart>
+            </ResponsiveContainer>
           </div>
         </div>
-
-        {/* TEMPERATURE CARD */}
-        <div style={cardStyle}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <Thermometer size={18} />
-            <h3>CORE_TEMP</h3>
-          </div>
-          <p style={{ fontSize: '3rem', fontWeight: 'bold', margin: '10px 0' }}>
-            {boardData.temp}<span style={{ fontSize: '1rem' }}>°C</span>
-          </p>
-          <div style={{ width: '100%', height: '5px', backgroundColor: '#222' }}>
-            <div style={{
-              width: `${(boardData.temp / 50) * 100}%`,
-              height: '100%',
-              backgroundColor: '#00ff99'
-            }}></div>
-          </div>
-        </div>
-
-        {/* MEMORY CARD */}
-        <div style={cardStyle}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <Cpu size={18} />
-            <h3>FREE_HEAP</h3>
-          </div>
-          <p style={{ fontSize: '1.5rem', margin: '15px 0' }}>{boardData.mem} bytes</p>
-          <p style={{ color: '#555', fontSize: '0.7rem' }}>UPTIME_MS: {boardData.ts}</p>
-        </div>
-
       </div>
 
-      <div style={{ marginTop: '30px', padding: '20px', background: '#1a1a1a', borderRadius: '8px' }}>
+      {/* MIDDLE ROW: STAT CARDS */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '20px' }}>
+        <div style={cardStyle}>
+          <h3><Thermometer size={14} /> TEMP</h3>
+          <p style={{ fontSize: '2rem', fontWeight: 'bold' }}>{boardData.temp}°C</p>
+        </div>
+        <div style={cardStyle}>
+          <h3><Cpu size={14} /> HEAP_FREE</h3>
+          <p style={{ fontSize: '1.2rem' }}>{boardData.mem} bytes</p>
+        </div>
+        <div style={cardStyle}>
+          <h3><Activity size={14} /> UPTIME</h3>
+          <p style={{ fontSize: '1.2rem' }}>{boardData.ts} ms</p>
+        </div>
+      </div>
+
+      {/* TIME-TRAVEL DEBUGGER */}
+      <div style={{ marginTop: '20px', padding: '20px', background: '#111', borderRadius: '8px', border: '1px solid #222' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px' }}>
-          <h3>TIME-TRAVEL DEBUGGER</h3>
+          <h3 style={{ fontSize: '0.9rem', color: '#888' }}>TIME-TRAVEL_DEBUGGER</h3>
           <button
             onClick={() => setIsLive(!isLive)}
             style={{
-              backgroundColor: isLive ? '#ff0033' : '#00ff99',
-              color: 'black', padding: '5px 15px', border: 'none', cursor: 'pointer', fontWeight: 'bold'
+              backgroundColor: isLive ? '#333' : '#00ff99',
+              color: isLive ? '#888' : 'black', padding: '5px 15px', border: 'none', cursor: 'pointer', fontWeight: 'bold', borderRadius: '4px'
             }}
           >
-            {isLive ? "PAUSE & EXPLORE" : "RESUME LIVE"}
+            {isLive ? "PAUSE TO SEEK" : "RESUME LIVE"}
           </button>
         </div>
-
         <input
           type="range"
           min="0"
@@ -132,42 +141,43 @@ function App() {
           onChange={(e) => {
             const idx = e.target.value;
             setSeekIndex(idx);
+            const h = history[idx];
             setBoardData({
-              id: history[idx].chip_id,
-              ts: history[idx].timestamp_ms,
-              led: history[idx].led_state,
-              temp: history[idx].temperature,
-              mem: history[idx].memory_free
+              id: h.chip_id,
+              ts: h.timestamp_ms,
+              led: h.led_state,
+              temp: h.temperature,
+              mem: h.memory_free
             });
           }}
-          style={{ width: '100%', cursor: isLive ? 'not-allowed' : 'pointer' }}
+          style={{ width: '100%', accentColor: '#00ff99', cursor: isLive ? 'not-allowed' : 'pointer' }}
         />
-        <p style={{ color: '#555', fontSize: '0.8rem' }}>
-          {isLive ? "Showing Live Stream..." : `Viewing Record ID: ${history[seekIndex]?.id || 'N/A'}`}
-        </p>
       </div>
 
+      {/* AI COMMAND CONSOLE */}
+      <div style={{ marginTop: '20px', background: '#000', border: '1px solid #00ff9955', borderRadius: '8px', padding: '15px' }}>
+        <form onSubmit={handleCommand} style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+          <Terminal size={20} color="#00ff99" />
+          <span style={{ color: '#00ff99', fontWeight: 'bold' }}>GEMINI_LINK:</span>
+          <input
+            type="text"
+            value={command}
+            onChange={(e) => setCommand(e.target.value)}
+            placeholder="Ask AI to analyze patterns or send commands..."
+            style={{ background: 'transparent', border: 'none', color: '#fff', flex: 1, outline: 'none', fontSize: '1rem', fontFamily: 'monospace' }}
+          />
+        </form>
+      </div>
 
-
-      {/* SYSTEM STATUS FOOTER */}
-      <footer style={{ marginTop: '50px', borderTop: '1px solid #222', paddingTop: '10px', display: 'flex', gap: '20px' }}>
-        <div style={{ color: '#00ff99', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '5px' }}>
-          <div style={{ width: '8px', height: '8px', backgroundColor: '#00ff99', borderRadius: '50%' }}></div>
-          LIVE_SYNC_ACTIVE
-        </div>
-      </footer>
     </div>
   );
 }
 
-// Styling for the cards
 const cardStyle = {
   background: '#111',
   border: '1px solid #222',
   padding: '20px',
   borderRadius: '8px',
-  position: 'relative',
-  overflow: 'hidden'
 };
 
 export default App;
