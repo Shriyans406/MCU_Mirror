@@ -18,6 +18,9 @@ function App() {
     mem: 0
   });
 
+
+  const [aiResponse, setAiResponse] = useState("Awaiting command...");
+
   useEffect(() => {
     const interval = setInterval(() => {
       if (isLive) {
@@ -46,10 +49,15 @@ function App() {
     };
   }, [isLive]);
 
-  const handleCommand = (e) => {
+  const handleCommand = async (e) => {
     e.preventDefault();
-    console.log("Command sent to Buffer:", command);
-    // Logic for Phase 4 will go here
+    setAiResponse("Gemini is thinking...");
+    try {
+      const res = await axios.post('http://127.0.0.1:8000/ask_ai', { message: command });
+      setAiResponse(res.data.response);
+    } catch (err) {
+      setAiResponse("Error connecting to AI.");
+    }
     setCommand("");
   };
 
