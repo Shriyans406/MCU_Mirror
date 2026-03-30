@@ -1,0 +1,14 @@
+# Secrets
+.env
+
+# Hardware History (Database)
+*.db
+
+# Python Junk
+__pycache__/
+*.py[cod]
+venv/
+
+# Node Junk
+node_modules/
+dist/

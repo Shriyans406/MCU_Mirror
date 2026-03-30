@@ -7,6 +7,11 @@ import sqlite3
 from typing import Optional
 import google.generativeai as genai
 
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+
 # 1. SETUP THE API
 app = FastAPI()
 
@@ -23,9 +28,16 @@ SERIAL_PORT = 'COM5'
 BAUD_RATE = 115200
 
 # --- GEMINI AI SETUP ---
-GEMINI_API_KEY = "AIzaSyBFnn1PJCy9FnhD5bZL-SYB_JK7wcwoBZs" 
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+
+# Check if the key exists before starting
+if not GEMINI_API_KEY:
+    print("CRITICAL ERROR: GEMINI_API_KEY not found in .env file!")
+else:
+    genai.configure(api_key=GEMINI_API_KEY)
+
 genai.configure(api_key=GEMINI_API_KEY)
-model = genai.GenerativeModel('gemini-1.5-flash')
+model = genai.GenerativeModel('models/gemini-2.0-flash')
 
 SYSTEM_PROMPT = """
 You are an Embedded Systems Expert for the Shrike-Mirror Digital Twin project.
@@ -100,7 +112,7 @@ def listen_to_board():
                 
     except Exception as e:
         print(f"SERIAL_CRASH: {e}")
-        
+
 thread = threading.Thread(target=listen_to_board, daemon=True)
 thread.start()
 
@@ -127,31 +139,41 @@ async def get_history(limit: int = 100):
 async def root():
     return {"status": "Shrike-Mirror Backend is Running", "check_data_at": "/mirror"}
 
-# 3. REFINED AI COMMAND LOGIC
 @app.post("/ask_ai")
 async def ask_ai(payload: dict):
     global ser
     user_message = payload.get("message", "")
     
-    conn = sqlite3.connect(DB_NAME)
-    cursor = conn.cursor()
-    cursor.execute('SELECT temperature, led_state, memory_free FROM telemetry ORDER BY id DESC LIMIT 10')
-    history = cursor.fetchall()
-    conn.close()
+    try:
+        # Fetch history
+        conn = sqlite3.connect(DB_NAME)
+        cursor = conn.cursor()
+        cursor.execute('SELECT temperature, led_state FROM telemetry ORDER BY id DESC LIMIT 5')
+        history = cursor.fetchall()
+        conn.close()
 
-    context = f"Current Telemetry History: {history}\nUser says: {user_message}"
-    
-    # We tell Gemini to be very specific if it wants to blink
-    response = model.generate_content([
-        SYSTEM_PROMPT + "\nIMPORTANT: If you want to blink the LED, start your response with the word 'COMMAND:BLINK'.", 
-        context
-    ])
-    ai_text = response.text
+        # Build context
+        context = f"Board History: {history}\nUser Message: {user_message}"
+        
+        # We use a try block specifically for the AI generation
+        try:
+            response = model.generate_content([SYSTEM_PROMPT, context])
+            ai_text = response.text
+        except Exception as model_err:
+            print(f"MODEL_NAME_ERROR: {model_err}")
+            # Fallback to standard pro model if flash fails
+            temp_model = genai.GenerativeModel('gemini-pro')
+            response = temp_model.generate_content([SYSTEM_PROMPT, context])
+            ai_text = response.text
 
-    # --- EXECUTE COMMAND ON HARDWARE ---
-    if "COMMAND:BLINK" in ai_text.upper() or "BLINK" in ai_text.upper():
-        if ser and ser.is_open:
-            ser.write(b"BLINK\n") # This sends the trigger to your MCU code
-            print("!!! AI EXECUTED BLINK COMMAND !!!")
+        # Command Logic
+        if "BLINK" in ai_text.upper():
+            if ser and ser.is_open:
+                ser.write(b"BLINK\n")
+                print("AI EXECUTED BLINK")
 
-    return {"response": ai_text}
+        return {"response": ai_text}
+
+    except Exception as e:
+        print(f"GENERAL_AI_CRASH: {e}")
+        return {"response": f"AI_OFFLINE: {str(e)}"}

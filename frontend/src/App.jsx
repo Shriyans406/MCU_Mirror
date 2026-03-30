@@ -19,7 +19,7 @@ function App() {
   });
 
 
-  const [aiResponse, setAiResponse] = useState("Awaiting command...");
+  const [aiResponse, setAiResponse] = useState("SYSTEM READY. AWAITING INPUT...");
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -51,14 +51,19 @@ function App() {
 
   const handleCommand = async (e) => {
     e.preventDefault();
-    setAiResponse("Gemini is thinking...");
+    if (!command.trim()) return; // Don't send empty messages
+
+    const userQuery = command; // Save the message before clearing
+    setCommand("");            // Clear the input box so you can type again
+    setAiResponse("THINKING...");
+
     try {
-      const res = await axios.post('http://127.0.0.1:8000/ask_ai', { message: command });
+      const res = await axios.post('http://127.0.0.1:8000/ask_ai', { message: userQuery });
       setAiResponse(res.data.response);
     } catch (err) {
-      setAiResponse("Error connecting to AI.");
+      console.error("AI Error:", err);
+      setAiResponse("ERROR: COULD NOT REACH BRAIN. CHECK BACKEND TERMINAL.");
     }
-    setCommand("");
   };
 
   return (
@@ -163,7 +168,18 @@ function App() {
       </div>
 
       {/* AI COMMAND CONSOLE */}
-      <div style={{ marginTop: '20px', background: '#000', border: '1px solid #00ff9955', borderRadius: '8px', padding: '15px' }}>
+      <div style={{
+        background: '#111',
+        borderLeft: '4px solid #00ff99',
+        padding: '15px',
+        marginBottom: '15px',
+        fontSize: '0.9rem',
+        color: '#ddd',
+        lineHeight: '1.4',
+        fontStyle: 'italic'
+      }}>
+        <span style={{ color: '#00ff99', fontWeight: 'bold', marginRight: '10px' }}>GEMINI_VOICE:</span>
+        {aiResponse}
         <form onSubmit={handleCommand} style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
           <Terminal size={20} color="#00ff99" />
           <span style={{ color: '#00ff99', fontWeight: 'bold' }}>GEMINI_LINK:</span>
