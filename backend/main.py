@@ -37,7 +37,7 @@ else:
     genai.configure(api_key=GEMINI_API_KEY)
 
 genai.configure(api_key=GEMINI_API_KEY)
-model = genai.GenerativeModel('models/gemini-2.0-flash')
+model = genai.GenerativeModel('models/gemini-2.5-flash')
 
 SYSTEM_PROMPT = """
 You are an Embedded Systems Expert for the Shrike-Mirror Digital Twin project.
@@ -113,8 +113,10 @@ def listen_to_board():
     except Exception as e:
         print(f"SERIAL_CRASH: {e}")
 
-thread = threading.Thread(target=listen_to_board, daemon=True)
-thread.start()
+@app.on_event("startup")
+def start_background_tasks():
+    thread = threading.Thread(target=listen_to_board, daemon=True)
+    thread.start()
 
 @app.get("/mirror")
 async def get_mirror():
@@ -156,15 +158,8 @@ async def ask_ai(payload: dict):
         context = f"Board History: {history}\nUser Message: {user_message}"
         
         # We use a try block specifically for the AI generation
-        try:
-            response = model.generate_content([SYSTEM_PROMPT, context])
-            ai_text = response.text
-        except Exception as model_err:
-            print(f"MODEL_NAME_ERROR: {model_err}")
-            # Fallback to standard pro model if flash fails
-            temp_model = genai.GenerativeModel('gemini-pro')
-            response = temp_model.generate_content([SYSTEM_PROMPT, context])
-            ai_text = response.text
+        response = model.generate_content([SYSTEM_PROMPT, context])
+        ai_text = response.text
 
         # Command Logic
         if "BLINK" in ai_text.upper():
